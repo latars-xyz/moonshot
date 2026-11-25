@@ -138,6 +138,8 @@ export interface FileInput {
 export interface CreatorInput {
   link: ParsedLink | null;
   name: string;
+  /** What they were searched for: used as the name only when the link and the page give nothing better. */
+  nameHint: string | null;
   slug: string | null;
   type: "creator" | "media";
   platform: Platform;
@@ -181,7 +183,8 @@ export function cleanCreator(body: unknown): CreatorInput | { error: string } {
   const b = body as Record<string, unknown>;
   const link = b.link ? parseLink(b.link) : null;
   if (b.link && !link) return { error: "That link doesn't look right. Paste their Instagram, TikTok, X, YouTube or website link." };
-  const name = (typeof b.name === "string" ? b.name.trim().slice(0, 80) : "") || link?.name || "";
+  const name = (typeof b.name === "string" ? b.name.trim().slice(0, 80) : "") || link?.name || (typeof b.nameHint === "string" ? b.nameHint.trim().slice(0, 80) : "");
+  const nameHint = typeof b.nameHint === "string" && b.nameHint.trim() ? b.nameHint.trim().slice(0, 80) : null;
   if (!name) return { error: "Add a link or a name." };
   const slug = typeof b.slug === "string" && /^[a-z0-9-]{1,80}$/.test(b.slug) ? b.slug : null;
   const asked = (PLATFORMS as readonly string[]).includes(String(b.platform)) ? (b.platform as Platform) : "website";
@@ -209,7 +212,7 @@ export function cleanCreator(body: unknown): CreatorInput | { error: string } {
   }
   const file = cleanFile(b.file);
   if (file && "error" in file) return file;
-  return { link, name, slug, type: b.type === "media" ? "media" : "creator", platform, niche, country, followers, bio, items, file };
+  return { link, name, nameHint, slug, type: b.type === "media" ? "media" : "creator", platform, niche, country, followers, bio, items, file };
 }
 
 /** "Instagram reel: 150000" or "Banner, 80000-120000" per line. Lines that don't read as a rate are reported, not dropped. */
@@ -243,6 +246,8 @@ export interface CreatorDTO {
   createdAt: string;
   items: { deliverable: string; platform: Platform; priceMin: number; priceMax: number; currency: Currency }[];
   files: { id: string; name: string; mime: string }[];
+  /** Has a picture: GET /api/rates/avatars/<slug>. */
+  hasAvatar: boolean;
 }
 
 interface CreatorRow {
@@ -258,6 +263,7 @@ interface CreatorRow {
   followers: number | null;
   bio: string | null;
   hidden: boolean;
+  has_avatar: boolean;
   created_at: Date | string;
   added_by_email?: string | null;
   added_by_admin?: boolean;
@@ -275,7 +281,7 @@ async function attach(db: DB, rows: CreatorRow[]): Promise<(CreatorDTO & { id: s
   return rows.map((r) => ({
     id: r.id,
     hidden: r.hidden,
-    addedBy: r.added_by_admin ? "Admin" : r.added_by_email ?? null,
+    addedBy: r.added_by_admin ? "Admin" : r.added_by_email ?? "Visitor",
     slug: r.slug,
     name: r.name,
     type: r.type,
@@ -289,14 +295,15 @@ async function attach(db: DB, rows: CreatorRow[]): Promise<(CreatorDTO & { id: s
     createdAt: new Date(r.created_at).toISOString(),
     items: items.filter((i) => i.creator_id === r.id).map((i) => ({ deliverable: i.deliverable, platform: i.platform, priceMin: Number(i.price_min), priceMax: Number(i.price_max), currency: i.currency })),
     files: files.filter((f) => f.creator_id === r.id).map((f) => ({ id: f.id, name: f.name, mime: f.mime })),
+    hasAvatar: Boolean(r.has_avatar),
   }));
 }
 
 type Attached = Awaited<ReturnType<typeof attach>>[number];
 /** What the public site sees: no ids, no moderation state, no who-added-it. */
-const publicView = (c: Attached): CreatorDTO => ({ slug: c.slug, name: c.name, type: c.type, platform: c.platform, niche: c.niche, country: c.country, website: c.website, handle: c.handle, followers: c.followers, bio: c.bio, createdAt: c.createdAt, items: c.items, files: c.files });
+const publicView = (c: Attached): CreatorDTO => ({ slug: c.slug, name: c.name, type: c.type, platform: c.platform, niche: c.niche, country: c.country, website: c.website, handle: c.handle, followers: c.followers, bio: c.bio, createdAt: c.createdAt, items: c.items, files: c.files, hasAvatar: c.hasAvatar });
 
-const COLUMNS = sql`c."id", c."slug", c."name", c."type", c."platform", c."niche", c."country", c."website", c."handle", c."followers", c."bio", c."hidden", c."created_at", c."added_by_admin", u."email" AS "added_by_email"`;
+const COLUMNS = sql`c."id", c."slug", c."name", c."type", c."platform", c."niche", c."country", c."website", c."handle", c."followers", c."bio", c."hidden", (c."avatar" IS NOT NULL) AS "has_avatar", c."created_at", c."added_by_admin", u."email" AS "added_by_email"`;
 const FROM = sql`FROM "rates"."creators" c LEFT JOIN "rates"."users" u ON u."id" = c."added_by"`;
 
 /** Public: every visible creator, newest first. */
@@ -319,6 +326,12 @@ export async function getFile(db: DB, id: string): Promise<{ name: string; mime:
   return row ? { name: row.name, mime: row.mime, data: Buffer.from(row.data) } : null;
 }
 
+export async function getAvatar(db: DB, slug: string): Promise<{ mime: string; data: Buffer } | null> {
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
+  const row = rowsOf<{ avatar: Uint8Array | null; avatar_mime: string | null }>(await db.execute(sql`SELECT "avatar","avatar_mime" FROM "rates"."creators" WHERE "slug" = ${slug} AND NOT "hidden" AND "avatar" IS NOT NULL`))[0];
+  return row?.avatar && row.avatar_mime ? { mime: row.avatar_mime, data: Buffer.from(row.avatar) } : null;
+}
+
 export interface Adder {
   userId: string | null;
   admin: boolean;
@@ -337,17 +350,29 @@ async function freeSlug(db: DB, base: string) {
  * Adds a creator, or adds rates to one that's already there (found by its slug or by the same link). Rates and the
  * uploaded rate card are always added to; a creator's existing details are only filled in where they were empty.
  */
-export async function addCreator(db: DB, input: CreatorInput, by: Adder): Promise<{ creator: CreatorDTO; created: boolean }> {
+export async function addCreator(
+  db: DB,
+  input: CreatorInput,
+  by: Adder,
+  /** Called only when this really is a new creator, to fill in what the link makes public (name, bio, picture). */
+  enrich?: () => Promise<{ name?: string; bio?: string; image?: { mime: string; data: Buffer } }>,
+): Promise<{ creator: CreatorDTO; created: boolean }> {
   const key = input.link?.key ?? null;
   let row = input.slug ? rowsOf<{ id: string; slug: string }>(await db.execute(sql`SELECT "id","slug" FROM "rates"."creators" WHERE "slug" = ${input.slug}`))[0] : undefined;
   if (!row && key) row = rowsOf<{ id: string; slug: string }>(await db.execute(sql`SELECT "id","slug" FROM "rates"."creators" WHERE "link_key" = ${key}`))[0];
   let created = false;
   if (!row) {
-    const slug = await freeSlug(db, input.slug ?? slugify(input.name));
+    const found = enrich ? await enrich().catch(() => ({})) : {};
+    const e = found as { name?: string; bio?: string; image?: { mime: string; data: Buffer } };
+    // A name typed in wins; otherwise what the page calls itself; otherwise what the link says.
+    const given = input.link && input.name === input.link.name ? null : input.name;
+    const name = given ?? e.name ?? input.nameHint ?? input.name;
+    const bio = input.bio ?? e.bio ?? null;
+    const slug = await freeSlug(db, input.slug ?? slugify(name));
     row = rowsOf<{ id: string; slug: string }>(
       await db.execute(sql`
-        INSERT INTO "rates"."creators" ("slug","link_key","name","type","platform","niche","country","website","handle","followers","bio","added_by","added_by_admin")
-        VALUES (${slug}, ${key}, ${input.name}, ${input.type}, ${input.platform}, ${input.niche}, ${input.country}, ${input.link?.website ?? null}, ${input.link?.handle ?? null}, ${input.followers}, ${input.bio}, ${by.userId}, ${by.admin})
+        INSERT INTO "rates"."creators" ("slug","link_key","name","type","platform","niche","country","website","handle","followers","bio","avatar","avatar_mime","added_by","added_by_admin")
+        VALUES (${slug}, ${key}, ${name}, ${input.type}, ${input.platform}, ${input.niche}, ${input.country}, ${input.link?.website ?? null}, ${input.link?.handle ?? null}, ${input.followers}, ${bio}, ${e.image?.data ?? null}, ${e.image?.mime ?? null}, ${by.userId}, ${by.admin})
         ON CONFLICT DO NOTHING RETURNING "id","slug"`),
     )[0];
     // Lost a race with someone adding the same link: use theirs.

@@ -87,11 +87,14 @@ This service also hosts the API for Rates by Latars at `rates.latars.xyz` (repo 
 | `POST /api/rates/signup`, `POST /api/rates/signin` | Email + password (8+ characters, scrypt-hashed). Return a token and the user. Rate limited per network. |
 | `POST /api/rates/signout`, `GET /api/rates/me` | End this device's token; check who a token belongs to. |
 | `GET /api/rates/creators` | Public. Every visible creator with their rates and rate card files. |
-| `POST /api/rates/creators` | Needs an account. Adds a creator from `link` (Instagram, TikTok, X, YouTube or a website; nothing is fetched, the name and handle are read from the link) plus optional `name`, `niche`, `type`, `country`, `followers`, `items` (rates) and `file` (a PDF, JPEG, PNG or WebP under 3 MB, base64). If the creator is already there (same `slug` or same link), the rates and file are added to it instead of making a duplicate, and empty details are filled in. |
+| `POST /api/rates/creators` | No account needed (a signed-in member is recorded as the adder, anyone else shows as a visitor in the admin). Adds a creator from `link` (Instagram, TikTok, X, YouTube or a website). The handle and a first-guess name come from the link itself; for a new creator the server then looks up what is public (see below). `nameHint` is the name to use if nothing better turns up plus optional `name`, `niche`, `type`, `country`, `followers`, `items` (rates) and `file` (a PDF, JPEG, PNG or WebP under 3 MB, base64). If the creator is already there (same `slug` or same link), the rates and file are added to it instead of making a duplicate, and empty details are filled in. |
 | `GET /api/rates/creators/<slug>` | One creator. |
+| `GET /api/rates/avatars/<slug>` | A creator's picture (a profile photo or a brand's logo), kept when they were added. |
 | `GET /api/rates/files/<id>` | An uploaded rate card, served inline with a locked-down content type and CSP. Hidden creators' files are not served. |
 
-Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to call it from a browser. Limits per hour per network: `RATE_LIMIT_RATES_SIGNUP_PER_HOUR` (10), `RATE_LIMIT_RATES_SIGNIN_PER_HOUR` (20), `RATE_LIMIT_RATES_ADD_PER_HOUR` (40).
+**Filling in a creator from their link.** For a new creator the server reads the public page (YouTube, X and websites: name, bio and picture from the page's meta tags) and fetches a picture, which it stores itself so the site never depends on a platform's expiring image links (website logos, TikTok, YouTube and X pictures come via unavatar.io when the page has none). Instagram and TikTok pages show automated readers only a login wall, so they are not fetched, and no platform publishes follower counts this way: those stay empty. Everything is best effort, a failed lookup never blocks adding. The fetch is locked down against server-side request forgery (`src/lib/safe-fetch.ts`): public addresses only, checked when connecting, redirects re-checked, ports 80 and 443 only, 5 seconds and a size cap.
+
+Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to call it from a browser. Limits per hour per network: `RATE_LIMIT_RATES_SIGNUP_PER_HOUR` (10), `RATE_LIMIT_RATES_SIGNIN_PER_HOUR` (20), `RATE_LIMIT_RATES_ADD_PER_HOUR` (20, the only guard on adding, since it needs no account).
 
 ## Stats
 

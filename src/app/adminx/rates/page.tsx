@@ -65,7 +65,7 @@ export default async function RatesAdmin() {
                     <p className="text-xs text-muted">
                       {c.platform}
                       {c.handle ? ` @${c.handle}` : ""} · {c.items.length} rate{c.items.length === 1 ? "" : "s"}
-                      {c.files.length ? ` · ${c.files.length} file${c.files.length === 1 ? "" : "s"}` : ""} · {c.addedBy ?? "Deleted account"} · {timeAgo(new Date(c.createdAt))}
+                      {c.files.length ? ` · ${c.files.length} file${c.files.length === 1 ? "" : "s"}` : ""} · {c.addedBy} · {timeAgo(new Date(c.createdAt))}
                     </p>
                   </div>
                   <form action={hideCreatorAction}>
