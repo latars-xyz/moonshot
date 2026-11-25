@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { MAX_FILE_BYTES, addCreator, cleanCreator, listCreators, userForToken } from "@/lib/rates";
+import { enrichFromLink } from "@/lib/rates-enrich";
 import { bearer, preflight, readJson, reply } from "@/lib/rates-route";
 import { rateLimit } from "@/lib/me";
 
@@ -23,6 +24,6 @@ export async function POST(req: NextRequest) {
   if (body === undefined) return reply(req, { error: "That couldn't be read, or it was too large. Rate cards must be under 3 MB." }, 413);
   const input = cleanCreator(body);
   if ("error" in input) return reply(req, { error: input.error }, 400);
-  const { creator, created } = await addCreator(db, input, { userId: user?.id ?? null, admin: false });
+  const { creator, created } = await addCreator(db, input, { userId: user?.id ?? null, admin: false }, input.link ? () => enrichFromLink(input.link!) : undefined);
   return reply(req, { creator, created }, created ? 201 : 200);
 }

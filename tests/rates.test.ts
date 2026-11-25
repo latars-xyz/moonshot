@@ -4,8 +4,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "@/lib/db/schema";
+import { cleanName, enrichFromLink, imageType, readMeta, type Fetcher } from "@/lib/rates-enrich";
+import { isPrivateAddress, safeFetch } from "@/lib/safe-fetch";
 import type { DB } from "@/lib/db";
-import { addCreator, cleanCreator, cleanFile, corsHeaders, deleteCreator, getCreator, getFile, listCreators, parseLink, parseRateLines, ratesAdminStats, ratesUsersCsv, setCreatorHidden, signIn, signOut, signUp, slugify, userForToken, type CreatorInput } from "@/lib/rates";
+import { addCreator, cleanCreator, cleanFile, corsHeaders, deleteCreator, getAvatar, getCreator, getFile, listCreators, parseLink, parseRateLines, ratesAdminStats, ratesUsersCsv, setCreatorHidden, signIn, signOut, signUp, slugify, userForToken, type CreatorInput } from "@/lib/rates";
 
 let db: DB;
 beforeAll(async () => {
@@ -177,5 +179,85 @@ describe("browser access", () => {
     expect(corsHeaders("https://rates.latars.xyz")["Access-Control-Allow-Origin"]).toBe("https://rates.latars.xyz");
     expect(corsHeaders("https://evil.example")["Access-Control-Allow-Origin"]).toBeUndefined();
     expect(corsHeaders(null)["Access-Control-Allow-Origin"]).toBeUndefined();
+  });
+});
+
+describe("filling in a creator from their link", () => {
+  const fetcherFor = (pages: Record<string, { body: string | Buffer; type?: string; status?: number }>): Fetcher => async (url) => {
+    const hit = pages[url];
+    if (!hit) throw new Error("blocked or missing");
+    return { status: hit.status ?? 200, url, contentType: hit.type ?? "text/html", body: Buffer.isBuffer(hit.body) ? hit.body : Buffer.from(hit.body) };
+  };
+  const link = (u: string) => parseLink(u)!;
+
+  it("reads names out of page titles", () => {
+    expect(cleanName("Davido (@davido) on X", link("x.com/davido"))).toBe("Davido");
+    expect(cleanName("MrBeast - YouTube", link("youtube.com/@mrbeast"))).toBe("MrBeast");
+    expect(cleanName("Home | BellaNaija", link("bellanaija.com"))).toBe("BellaNaija");
+    expect(cleanName("Instagram", link("instagram.com/x"))).toBeUndefined();
+    expect(cleanName("Just a moment...", link("example.com"))).toBeUndefined();
+    expect(readMeta('<meta property="og:title" content="Tom &amp; Jerry &#39;s"><meta name="description" content="hi">')).toMatchObject({ "og:title": "Tom & Jerry 's", description: "hi" });
+  });
+
+  it("gets name, bio and picture from a YouTube channel page", async () => {
+    const got = await enrichFromLink(link("https://youtube.com/@mrbeast"), fetcherFor({
+      "https://www.youtube.com/@mrbeast": { body: '<meta property="og:title" content="MrBeast"><meta property="og:description" content="New videos every Saturday"><meta property="og:image" content="https://cdn.example/pic.png">' },
+      "https://cdn.example/pic.png": { body: PNG, type: "image/png" },
+    }));
+    expect(got).toMatchObject({ name: "MrBeast", bio: "New videos every Saturday" });
+    expect(got.image?.mime).toBe("image/png");
+  });
+
+  it("falls back to the avatar service for TikTok and skips login walls", async () => {
+    const seen: string[] = [];
+    const f: Fetcher = async (url) => { seen.push(url); if (url.startsWith("https://unavatar.io/tiktok/")) return { status: 200, url, contentType: "image/png", body: PNG }; throw new Error("no"); };
+    const got = await enrichFromLink(link("tiktok.com/@khaby.lame"), f);
+    expect(got.image?.mime).toBe("image/png");
+    expect(seen).toEqual(["https://unavatar.io/tiktok/khaby.lame"]); // the TikTok page itself is not fetched
+    expect(await enrichFromLink(link("instagram.com/bimboademoye"), async () => { throw new Error("down"); })).toEqual({});
+  });
+
+  it("never keeps a picture that isn't a photo, or is too large", async () => {
+    const svg = fetcherFor({ "https://unavatar.io/youtube/x": { body: "<svg onload=alert(1)/>", type: "image/svg+xml" } });
+    expect((await enrichFromLink(link("youtube.com/@x"), svg)).image).toBeUndefined();
+    expect(imageType(Buffer.concat([PNG, Buffer.alloc(10)]))).toBe("image/png");
+    expect(imageType(Buffer.from("GIF89a"))).toBeNull();
+  });
+
+  it("stores the picture and details for a new creator, and uses the typed name over the page's", async () => {
+    const enrich = async () => ({ name: "Page Name", bio: "From the page", image: { mime: "image/png", data: PNG } });
+    const first = await addCreator(db, ok(cleanCreator({ link: "https://x.com/pagey", nameHint: "Pagey Searched" })), { userId: null, admin: false }, enrich);
+    expect(first.creator).toMatchObject({ name: "Page Name", bio: "From the page", hasAvatar: true });
+    const avatar = await getAvatar(db, first.creator.slug);
+    expect(avatar?.mime).toBe("image/png");
+    expect(avatar!.data.equals(PNG)).toBe(true);
+    const typed = await addCreator(db, ok(cleanCreator({ link: "https://x.com/typed1", name: "Typed Name" })), { userId: null, admin: false }, enrich);
+    expect(typed.creator.name).toBe("Typed Name");
+    // no page name: the search term beats the handle
+    const hinted = await addCreator(db, ok(cleanCreator({ link: "https://instagram.com/bimbo_ademoye2", nameHint: "Bimbo Ademoye" })), { userId: null, admin: false }, async () => ({}));
+    expect(hinted.creator).toMatchObject({ name: "Bimbo Ademoye", hasAvatar: false });
+    expect(await getAvatar(db, hinted.creator.slug)).toBeNull();
+    expect(await getAvatar(db, "../etc")).toBeNull();
+  });
+
+  it("does not look anything up for a creator that's already there", async () => {
+    let calls = 0;
+    await addCreator(db, ok(cleanCreator({ link: "https://x.com/pagey" })), { userId: null, admin: false }, async () => { calls++; return {}; });
+    expect(calls).toBe(0);
+  });
+
+  it("is added anyway when the lookup fails", async () => {
+    const { creator } = await addCreator(db, ok(cleanCreator({ link: "https://x.com/flaky1" })), { userId: null, admin: false }, async () => { throw new Error("boom"); });
+    expect(creator).toMatchObject({ slug: "flaky1", hasAvatar: false });
+  });
+});
+
+describe("the fetch guard", () => {
+  it("recognises non-public addresses", () => {
+    for (const ip of ["127.0.0.1", "10.0.0.5", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "0.0.0.0", "100.64.0.1", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "224.0.0.1", "not an ip"]) expect(isPrivateAddress(ip)).toBe(true);
+    for (const ip of ["8.8.8.8", "142.250.80.46", "172.32.0.1", "2606:4700:4700::1111"]) expect(isPrivateAddress(ip)).toBe(false);
+  });
+  it("refuses to fetch internal addresses, odd ports and other schemes", async () => {
+    for (const u of ["http://127.0.0.1/", "http://169.254.169.254/latest/meta-data/", "http://[::1]/", "http://localhost/", "http://example.com:8080/", "file:///etc/passwd", "ftp://example.com/", "http://user:pw@example.com/"]) await expect(safeFetch(u, { timeoutMs: 1500 })).rejects.toBeTruthy();
   });
 });
