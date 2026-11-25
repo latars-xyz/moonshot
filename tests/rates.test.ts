@@ -208,6 +208,12 @@ describe("filling in a creator from their link", () => {
     expect(got.image?.mime).toBe("image/png");
   });
 
+  it("finds YouTube's tags even when they sit far down a huge page", async () => {
+    const page = "<html><head><script>" + "x".repeat(900_000) + '</script><title>MrBeast - YouTube</title><meta name="description" content="Videos weekly"><meta property="og:title" content="MrBeast"></head>';
+    const got = await enrichFromLink(link("youtube.com/@mrbeast"), fetcherFor({ "https://www.youtube.com/@mrbeast": { body: page } }));
+    expect(got).toMatchObject({ name: "MrBeast", bio: "Videos weekly" });
+  });
+
   it("falls back to the avatar service for TikTok and skips login walls", async () => {
     const seen: string[] = [];
     const f: Fetcher = async (url) => { seen.push(url); if (url.startsWith("https://unavatar.io/tiktok/")) return { status: 200, url, contentType: "image/png", body: PNG }; throw new Error("no"); };

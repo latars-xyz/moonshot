@@ -30,7 +30,7 @@ const decode = (s: string) =>
 /** The page's og: and twitter: meta tags, by property name. */
 export function readMeta(html: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const head = html.slice(0, 250_000);
+  const head = html; // YouTube puts its tags about 900 KB into the page, so the whole (size-capped) body is scanned
   for (const tag of head.match(/<meta\b[^>]*>/gi) ?? []) {
     const key = tag.match(/\b(?:property|name)\s*=\s*"([^"]+)"/i)?.[1]?.toLowerCase();
     const value = tag.match(/\bcontent\s*=\s*"([^"]*)"/i)?.[1];
@@ -91,7 +91,7 @@ export async function enrichFromLink(link: ParsedLink, fetcher: Fetcher = safeFe
   let ogImage: string | undefined;
   if (pageUrl) {
     try {
-      const r = await fetcher(pageUrl, { accept: "text/html", maxBytes: 400_000 });
+      const r = await fetcher(pageUrl, { accept: "text/html", maxBytes: link.platform === "youtube" ? 1_200_000 : 400_000, timeoutMs: 8000 });
       if (r.status === 200 && /html/i.test(r.contentType)) {
         const meta = readMeta(r.body.toString("utf8"));
         out.name = cleanName(meta["og:title"] ?? meta["twitter:title"] ?? meta.title, link);

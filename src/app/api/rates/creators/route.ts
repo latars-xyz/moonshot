@@ -6,6 +6,10 @@ import { bearer, preflight, readJson, reply } from "@/lib/rates-route";
 import { rateLimit } from "@/lib/me";
 
 export const dynamic = "force-dynamic";
+
+// A slow look-up must never hold up adding someone: after this long they're added with what the link itself says.
+const ENRICH_MS = 10_000;
+const withTimeout = <T extends object>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<T>((r) => setTimeout(() => r({} as T), ms))]);
 export const OPTIONS = preflight;
 
 // Everyone's creators with their rates, newest first. Public.
@@ -24,6 +28,6 @@ export async function POST(req: NextRequest) {
   if (body === undefined) return reply(req, { error: "That couldn't be read, or it was too large. Rate cards must be under 3 MB." }, 413);
   const input = cleanCreator(body);
   if ("error" in input) return reply(req, { error: input.error }, 400);
-  const { creator, created } = await addCreator(db, input, { userId: user?.id ?? null, admin: false }, input.link ? () => enrichFromLink(input.link!) : undefined);
+  const { creator, created } = await addCreator(db, input, { userId: user?.id ?? null, admin: false }, input.link ? () => withTimeout(enrichFromLink(input.link!), ENRICH_MS) : undefined);
   return reply(req, { creator, created }, created ? 201 : 200);
 }
