@@ -3,11 +3,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import { sql } from "drizzle-orm";
+import { rowsOf } from "@/lib/ads";
 import * as schema from "@/lib/db/schema";
 import { cleanName, enrichFromLink, imageType, readMeta, type Fetcher } from "@/lib/rates-enrich";
 import { isPrivateAddress, safeFetch } from "@/lib/safe-fetch";
 import type { DB } from "@/lib/db";
-import { addCreator, cleanCreator, cleanFile, corsHeaders, deleteCreator, getAvatar, getCreator, getFile, listCreators, parseLink, parseRateLines, ratesAdminStats, ratesUsersCsv, setCreatorHidden, signIn, signOut, signUp, slugify, userForToken, type CreatorInput } from "@/lib/rates";
+import { addCreator, cleanCreator, cleanFile, corsHeaders, getAvatar, getCreator, getFile, listCreators, parseLink, signIn, signOut, signUp, slugify, userForToken, type CreatorInput } from "@/lib/rates";
 
 let db: DB;
 beforeAll(async () => {
@@ -73,15 +75,6 @@ describe("validation", () => {
     expect(cleanFile({ name: "big.png", type: "image/png", data: Buffer.concat([PNG, Buffer.alloc(3_100_000)]).toString("base64") })).toMatchObject({ error: expect.stringContaining("large") });
     expect(cleanFile({ name: "../../etc/passwd\"", type: "image/png", data: PNG.toString("base64") })).toMatchObject({ name: "....etcpasswd" });
   });
-  it("reads typed rate lines", () => {
-    const { items, bad } = parseRateLines("Instagram reel: 150,000\nBanner, 80000-120000\nStory - ₦25000\n\nnonsense", "NGN");
-    expect(items).toEqual([
-      { deliverable: "Instagram reel", priceMin: "150000", priceMax: "150000", currency: "NGN" },
-      { deliverable: "Banner", priceMin: "80000", priceMax: "120000", currency: "NGN" },
-      { deliverable: "Story", priceMin: "25000", priceMax: "25000", currency: "NGN" },
-    ]);
-    expect(bad).toEqual(["nonsense"]);
-  });
 });
 
 describe("accounts", () => {
@@ -126,8 +119,8 @@ describe("creators", () => {
   it("lets anyone add a creator without an account, shown as a visitor to the admin", async () => {
     const { creator } = await addCreator(db, input({ link: "https://tiktok.com/@walkin" }), { userId: null, admin: false });
     expect(creator.slug).toBe("walkin");
-    const row = (await ratesAdminStats(db)).recent.find((c) => c.slug === "walkin")!;
-    expect(row.addedBy).toBe("Visitor");
+    const row = rowsOf<{ added_by: string | null; added_by_admin: boolean }>(await db.execute(sql`SELECT "added_by","added_by_admin" FROM "rates"."creators" WHERE "slug" = 'walkin'`))[0];
+    expect(row).toEqual({ added_by: null, added_by_admin: false });
   });
 
   it("keeps existing details, filling only the empty ones", async () => {
@@ -150,27 +143,10 @@ describe("creators", () => {
     expect(got).toMatchObject({ name: "card.png", mime: "image/png" });
     expect(got!.data.equals(PNG)).toBe(true);
     expect(await getFile(db, "not-an-id")).toBeNull();
-    const admin = await ratesAdminStats(db);
-    await setCreatorHidden(db, admin.recent.find((c) => c.slug === "with-file")!.id, true);
+    await db.execute(sql`UPDATE "rates"."creators" SET "hidden" = true WHERE "slug" = 'with-file'`); // what the admin's Hide does
     expect(await getFile(db, creator.files[0].id)).toBeNull();
     expect(await getCreator(db, "with-file")).toBeNull();
     expect((await listCreators(db)).some((c) => c.slug === "with-file")).toBe(false);
-  });
-
-  it("lists, counts and deletes for the admin", async () => {
-    const s = await ratesAdminStats(db);
-    expect(s.creators).toBeGreaterThanOrEqual(5);
-    expect(s.hidden).toBe(1);
-    expect(s.users).toBeGreaterThanOrEqual(2);
-    expect(s.withRates).toBeGreaterThanOrEqual(2);
-    const row = s.recent.find((c) => c.slug === "bimboademoye")!;
-    expect(row.addedBy).toBe("adder@x.io");
-    await deleteCreator(db, row.id);
-    expect(await getCreator(db, "bimboademoye")).toBeNull();
-    expect((await ratesAdminStats(db)).rateItems).toBeLessThan(s.rateItems);
-    const csv = await ratesUsersCsv(db);
-    expect(csv.split("\r\n")[0]).toBe("email,name,creators_added,signed_up_at,last_seen_at");
-    expect(csv).toContain('"adder@x.io"');
   });
 });
 

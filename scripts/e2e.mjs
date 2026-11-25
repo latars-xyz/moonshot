@@ -1,6 +1,6 @@
 // End-to-end check in a real browser (Playwright + Chromium).
-// Needs a running server with ADMIN_KEY set:
-//   BASE_URL=http://localhost:3000 ADMIN_KEY=... SCREENSHOTS=./test-results npm run test:e2e
+// Needs a running server:
+//   BASE_URL=http://localhost:3000 SCREENSHOTS=./test-results npm run test:e2e
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -14,9 +14,6 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 // Moonshot's space (the other events live alongside it, e.g. /admarp-growth-summit).
 const EV = `${BASE}/moonshot`;
 const SHOTS = process.env.SCREENSHOTS;
-const ADMIN_KEY = process.env.ADMIN_KEY ?? "test-admin-key-123";
-// The secret address of the admin key form (the server's ADMIN_ENTRY): /adminx/<it>. Without it, the form is on /adminx.
-const ADMIN_ENTRY = process.env.ADMIN_ENTRY;
 const SAMPLE_POST = process.env.SAMPLE_POST ?? "https://x.com/Thedanieloreofe/status/2114706863631572995";
 const run = Date.now().toString(36);
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -525,149 +522,16 @@ try {
   assert.equal(notMine.status(), 404);
   await stranger.ctx.close();
 
-  step("admin (/adminx): hidden behind a secret address; wrong key refused; one admin for Event Connect and AdsSim");
-  const admin = await visitor({ viewport: { width: 1280, height: 900 } });
-  if (ADMIN_ENTRY) {
-    for (const path of ["/adminx", "/adminx/connect", "/adminx/connect/events", "/adminx/connect/stats", "/adminx/ads", "/admin", "/admin/stats", `/adminx/${ADMIN_ENTRY}x`]) assert.equal((await anon.page.request.get(`${BASE}${path}`)).status(), 404, `${path} looks like nothing's there`);
-    await admin.page.goto(`${BASE}/adminx/${ADMIN_ENTRY}`);
-  } else await admin.page.goto(`${BASE}/adminx`);
-  await admin.page.getByPlaceholder("Admin key").fill("definitely-wrong-key");
-  await admin.page.getByRole("button", { name: "Enter" }).click();
-  await admin.page.getByText("That key isn't right.").waitFor();
-  await admin.page.getByPlaceholder("Admin key").fill(ADMIN_KEY);
-  await admin.page.getByRole("button", { name: "Enter" }).click();
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx");
-  await admin.page.getByRole("heading", { name: "Admin", exact: true }).waitFor();
-  await admin.page.getByRole("heading", { name: "AdsSim" }).waitFor();
-  if (ADMIN_ENTRY) {
-    // The old secret address still works, and already signed in goes straight through.
-    await admin.page.goto(`${BASE}/admin/${ADMIN_ENTRY}`);
-    await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx");
+  step("the admin moved to latars.xyz: old /adminx and /admin addresses here redirect there");
+  {
+    const anon = await visitor({ viewport: { width: 1280, height: 900 } });
+    for (const [from, to] of [["/adminx", "https://latars.xyz/adminx"], ["/adminx/connect/events", "https://latars.xyz/adminx/connect/events"], ["/admin", "https://latars.xyz/adminx"]]) {
+      const r = await anon.page.request.get(`${BASE}${from}`, { maxRedirects: 0 });
+      assert.equal(r.status(), 307, `${from} redirects`);
+      assert.equal(r.headers().location, to, `${from} goes to the new admin`);
+    }
+    await anon.ctx.close();
   }
-  // Old admin links land in the right place.
-  await admin.page.goto(`${BASE}/admin?tab=accounts`);
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx/connect/people");
-  await admin.page.getByRole("navigation", { name: "Projects" }).getByRole("link", { name: "AdsSim" }).click();
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx/ads");
-  await admin.page.getByRole("navigation", { name: "Projects" }).getByRole("link", { name: "Event Connect" }).click();
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx/connect");
-  await admin.page.getByRole("heading", { name: /^Needs you/ }).waitFor();
-  await admin.page.getByText("Latest activity").waitFor();
-  // Each event has its own page: open Moonshot from the list, then its People.
-  await admin.page.getByRole("navigation", { name: "Event Connect sections" }).getByRole("link", { name: "Events" }).click();
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx/connect/events");
-  await admin.page.getByRole("link", { name: /^Moonshot by TechCabal/ }).click();
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/adminx/connect/events/moonshot");
-  await admin.page.getByRole("navigation", { name: "Event sections" }).getByRole("link", { name: "People" }).click();
-  await admin.page.waitForURL(/tab=people/);
-  await card(admin.page, `Bola ${run}`).getByRole("button", { name: "Hide" }).click();
-  await card(admin.page, `Bola ${run}`).getByRole("button", { name: "Unhide" }).waitFor();
-  await anon.page.goto(`${EV}?q=${encodeURIComponent(`Bola ${run}`)}`);
-  // A name-like search with no result shows an invite instead of "no one matches".
-  await anon.page.getByText(/no one matches|isn't here yet/i).waitFor();
-
-  const nothing = `zzz-nobody-${run}`;
-  // Repeat it so it ranks in the top-10 list even with earlier test searches around.
-  for (let i = 0; i < 5; i++) await anon.page.goto(`${EV}?q=${nothing}`);
-  await anon.page.getByText(/no one matches|isn't here yet/i).waitFor();
-
-  step("admin sees accounts and the mailing list, and can download it");
-  await admin.page.goto(`${BASE}/adminx/connect/people`);
-  const accountsList = admin.page.locator("section", { has: admin.page.getByRole("heading", { name: /^Accounts/ }) });
-  await accountsList.getByText(mail.toLowerCase()).waitFor();
-  await accountsList.getByText("wants updates").first().waitFor();
-  const csv = await (await admin.page.request.get(`${BASE}/admin/signups.csv`)).text();
-  assert.match(csv, new RegExp(`"bola\\.${run}@example\\.com","'=Bola"`), "mailing list CSV has her, formula-safe");
-  assert.equal((await anon.page.request.get(`${BASE}/admin/signups.csv`)).status(), 404, "CSV is admin-only");
-
-  step("admin adds moments from many X links at once, or an update with no credit");
-  await admin.page.goto(`${BASE}/adminx/connect/events/moonshot?tab=moments`);
-  await admin.page.getByLabel("X post links for Moments").fill(`https://example.com/nope\n${SAMPLE_POST}`);
-  await admin.page.getByRole("button", { name: "Add", exact: true }).click();
-  await admin.page.getByText(/couldn't be added\./).waitFor();
-  assert.ok((await admin.page.getByText("Not an X post link").count()) > 0, "bad link is reported");
-  // The sample post may already be a moment (shared above); either way it's in Moments now, unless X is unreachable.
-  const xIn = (await admin.page.getByText(/^(1 added, 0|0 added, 1) already there/).count()) > 0;
-  if (!xIn) console.log("  (X embed unreachable, skipped the X-link moment)");
-  // Pasting a link adds it straight away (no button); the same link again is skipped, and the box clears.
-  const linksBox = admin.page.getByLabel("X post links for Moments");
-  await linksBox.evaluate((el, text) => {
-    el.focus();
-    const dt = new DataTransfer();
-    dt.setData("text/plain", text);
-    el.value = text;
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
-  }, SAMPLE_POST);
-  await admin.page.getByText(xIn ? /^0 added, 1 already there, 0/ : /^0 added, 0 already there, 1/).waitFor();
-  assert.equal(await linksBox.inputValue(), "", "the box clears for the next paste");
-  const adminMoment = admin.page.locator("form", { has: admin.page.locator('input[name="from"][value="admin"]') });
-  await admin.page.getByText("Or add a photo or update instead").click();
-  await adminMoment.getByLabel(/what's happening/i).fill(`Doors open for day 2 ${run}`);
-  await adminMoment.getByRole("button", { name: "Post", exact: true }).click();
-  await admin.page.waitForURL(/added=1/);
-  await anon.page.goto(`${EV}/moments`);
-  const am = await openMoment(anon.page, `Doors open for day 2 ${run}`);
-  await am.getByText("Someone at the event").waitFor();
-  assert.equal(await am.getByText("Moonshot Connect").count(), 0, "no default credit");
-
-  step("admin pins a moment as Featured, sets top accounts, then unpins");
-  await admin.page.goto(`${BASE}/adminx/connect/events/moonshot?tab=moments&q=${encodeURIComponent("Doors open")}`);
-  const pinRow = admin.page.locator("li", { hasText: `Doors open for day 2 ${run}` });
-  await pinRow.getByRole("button", { name: "Feature this" }).click();
-  await pinRow.getByRole("button", { name: "Unpin" }).waitFor();
-  await admin.page.getByText(/pinned by you/).waitFor();
-  await anon.page.goto(`${EV}/moments`);
-  // The pinned moment leads the Featured slideshow.
-  const featuredTile = anon.page.locator('a[data-track="moments_featured"]').first();
-  assert.match(await featuredTile.getAttribute("aria-label"), new RegExp(`Doors open for day 2 ${run}`), "the pinned moment is Featured");
-  await anon.page.getByText(/^Featured/).first().waitFor();
-  await admin.page.getByLabel("Top accounts").fill("@TechCabal, someone_else");
-  await admin.page.getByRole("button", { name: "Save", exact: true }).click();
-  await admin.page.getByText("Saved 2 accounts.").waitFor();
-  await pinRow.getByRole("button", { name: "Unpin" }).click();
-  await pinRow.getByRole("button", { name: "Feature this" }).waitFor();
-  await admin.page.goto(`${BASE}/adminx/connect/events/moonshot?tab=moments`);
-  assert.equal(await admin.page.getByLabel("Top accounts").inputValue(), "@techcabal @someone_else");
-  await admin.page.getByText(/auto: rotates every 30 minutes/).waitFor();
-
-  // Time on page is sent when you move on: spend a little while on Moments, then tap back home.
-  await anon.page.goto(`${EV}/moments`);
-  await anon.page.waitForTimeout(1600);
-  await anon.page.getByRole("link", { name: "Moonshot Connect home" }).click();
-  await anon.page.waitForURL((u) => new URL(u).pathname === "/moonshot");
-  await anon.page.waitForTimeout(300);
-
-  step("admin Stats: visits, clicks, searches, devices, Moments, time on site, CSV");
-  await admin.page.goto(`${BASE}/adminx/connect/stats?days=1`);
-  const tile = async (label) => Number((await admin.page.getByText(label, { exact: true }).locator("xpath=preceding-sibling::div[1]/p[1]").innerText()).replace(/,/g, ""));
-  assert.ok((await tile("Visits")) > 0, "visits recorded");
-  assert.ok((await tile("Visitors")) > 0, "visitors recorded");
-  assert.ok((await tile("Contacted someone")) > 0, "contacts recorded");
-  assert.ok((await tile("Searches")) > 0, "searches recorded");
-  await admin.page.getByText("Visits per hour (Lagos time)").waitFor();
-  await admin.page.getByText(/on the site now/).waitFor();
-  await admin.page.getByText("Clicks by button").waitFor();
-  assert.ok((await admin.page.getByText("Add me (card)").count()) > 0, "click on 'Add me' recorded");
-  const empty = admin.page.locator("div", { has: admin.page.getByRole("heading", { name: "Searches that found nothing" }) }).last();
-  await empty.getByText(`“${nothing}”`).waitFor();
-  // New measures: devices, the Moments funnel and its top moments, time on pages.
-  await admin.page.getByText("📱 Phone").first().waitFor();
-  const momentsFunnel = admin.page.locator("div", { has: admin.page.getByRole("heading", { name: "📸 Moments" }) }).last();
-  assert.ok(Number((await momentsFunnel.locator("li").nth(1).locator("p").nth(1).innerText()).replace(/,/g, "")) > 0, "moment opens recorded");
-  await admin.page.getByRole("heading", { name: "Top moments" }).waitFor();
-  assert.ok((await admin.page.locator("table").filter({ hasText: "Opens" }).locator("tbody tr").count()) > 0, "top moments listed");
-  const timed = admin.page.locator("div", { has: admin.page.getByRole("heading", { name: "Time on page" }) }).last();
-  assert.ok((await timed.locator("li").count()) > 0, "time on page measured");
-  const statsCsv = await (await admin.page.request.get(`${BASE}/admin/stats.csv?days=7`)).text();
-  assert.match(statsCsv, /^day,visits,visitors,returning_visitors,clicks,contact_clicks,moment_opens,video_plays,searches,minutes_on_site\r\n\d{4}-\d{2}-\d{2},\d+/);
-  assert.equal((await anon.page.request.get(`${BASE}/admin/stats.csv`)).status(), 404, "stats CSV is admin-only");
-  for (const days of [7, 30, 90, 0]) {
-    await admin.page.goto(`${BASE}/adminx/connect/stats?days=${days}`);
-    await admin.page.getByText("From visit to connection").waitFor();
-  }
-  await admin.page.goto(`${BASE}/adminx/connect/stats?days=7`);
-  await admin.page.getByText("Visits per day").waitFor();
-  await shot(admin.page, "06-stats");
 
   step("events: a hub to pick from, each with its own Connect and Moments; old links still work");
   const hub = await visitor();
@@ -712,60 +576,6 @@ try {
   await hub.page.waitForURL((u) => new URL(u).pathname === "/moonshot" && new URL(u).searchParams.get("q") === `Bola ${run}`);
   assert.equal((await hub.page.request.get(`${BASE}/no-such-event`)).status(), 404);
   await hub.ctx.close();
-
-  step("admin: each event's own page; add events from a website, approve, or by hand");
-  await admin.page.goto(`${BASE}/adminx/connect/events/admarp-growth-summit?tab=people`);
-  await admin.page.getByRole("heading", { name: /^ADMARP Digital Product Growth Summit 2026/ }).waitFor();
-  await admin.page.locator("li", { hasText: `Gina ${run}` }).first().waitFor();
-  assert.equal(await admin.page.locator("li", { hasText: `Bola ${run}` }).count(), 0, "only ADMARP's cards");
-  await admin.page.getByLabel("Search").fill(`nobody-${run}`);
-  await admin.page.getByLabel("Search").press("Enter");
-  await admin.page.getByText(`Nothing matches “nobody-${run}”.`).first().waitFor();
-  await admin.page.goto(`${BASE}/adminx/connect/events`);
-  // Adding an event from just its website: internal addresses are refused, one that's already here is caught,
-  // and a real page is read and added to "Waiting for approval".
-  const siteBox = admin.page.locator("#site-events");
-  const siteForm = admin.page.locator("form", { has: siteBox });
-  await siteBox.fill("http://localhost:3000/");
-  await siteForm.getByRole("button", { name: "Add event" }).click();
-  await siteForm.getByText("That isn't a public website.").waitFor();
-  if (process.env.E2E_NETWORK !== "0") {
-    await siteBox.fill("https://fashionweekend.gtcoplc.com/");
-    await siteForm.getByRole("button", { name: "Add event" }).click();
-    await siteForm.getByText("That event is already here: /gtco-fashion-weekend.").waitFor({ timeout: 30000 });
-    await siteBox.fill("https://example.com/");
-    await siteForm.getByRole("button", { name: "Add event" }).click();
-    await siteForm.getByText(/^Added Example Domain as \/example-domain\. It's waiting for approval: add the dates and venue/).waitFor({ timeout: 30000 });
-    await admin.page.locator("li", { hasText: "Example Domain" }).getByText("Waiting for approval").waitFor();
-  }
-  await admin.page.goto(`${BASE}/adminx/connect`);
-  if (process.env.E2E_NETWORK !== "0") await admin.page.locator("li", { hasText: "Example Domain" }).getByText(/added by an admin/).waitFor();
-  // Events people created wait here; approving puts them on the homepage.
-  const waiting = admin.page.locator("li", { hasText: `Bola Meetup ${run}` }).first();
-  await waiting.getByText(/by bola\./).waitFor();
-  await waiting.getByRole("button", { name: "Approve" }).click();
-  // It leaves "Waiting for approval" (it may still be listed under "Missing details", without an Approve button).
-  await admin.page.locator("li", { hasText: `Bola Meetup ${run}` }).getByRole("button", { name: "Approve" }).waitFor({ state: "detached" });
-  const home = await visitor();
-  await home.page.goto(BASE);
-  await home.page.getByText(`Bola Meetup ${run}`, { exact: true }).waitFor();
-  await home.ctx.close();
-  await admin.page.goto(`${BASE}/adminx/connect/events`);
-  await admin.page.getByText("＋ Add an event by hand").click();
-  const newForm = admin.page.locator("details", { hasText: "＋ Add an event by hand" });
-  await newForm.getByLabel("Name", { exact: true }).fill(`Test Fest ${run}`);
-  await newForm.getByLabel("Address").fill("admin");
-  await newForm.getByRole("button", { name: "Add event" }).click();
-  await newForm.getByText("That address is used by the site. Pick another.").first().waitFor();
-  await newForm.getByLabel("Address").fill(`test-fest-${run}`);
-  await newForm.getByLabel("Venue").fill("Yaba, Lagos");
-  await newForm.getByLabel("First day").fill("2027-03-10");
-  await newForm.getByRole("button", { name: "Add event" }).click();
-  await newForm.getByText(`Added. It lives at /test-fest-${run}.`).waitFor();
-  const fest = await visitor();
-  await fest.page.goto(`${BASE}/test-fest-${run}`);
-  await fest.page.getByRole("heading", { name: new RegExp(`Who.s (going to|at) Test`) }).waitFor();
-  await fest.ctx.close();
 
   step("the old domain (moonshot.latars.xyz) 301s everything to events.latars.xyz/moonshot; other hosts are untouched");
   const viaHost = (host, path, method = "GET") =>

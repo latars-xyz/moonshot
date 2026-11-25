@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { ownedEvents } from "@/lib/events";
-import { authMode, getAccount, isAdminAccount, isAdminEmail } from "@/lib/auth";
+import { authMode, getAccount } from "@/lib/auth";
 import { signOutAction } from "@/lib/auth-actions";
 import { AccountForm, PasswordForm } from "@/components/auth-forms";
 import { Button, Card, PageTitle } from "@/components/ui";
@@ -29,11 +29,6 @@ export default async function AccountPage() {
         sub={account.email}
         action={
           <div className="flex items-center gap-2">
-            {isAdminAccount(account) && (
-              <Link href="/adminx" className="inline-flex h-9 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white">
-                Admin
-              </Link>
-            )}
             <form action={signOutAction}>
               <Button type="submit" variant="secondary" size="sm">
                 Sign out
@@ -42,15 +37,6 @@ export default async function AccountPage() {
           </div>
         }
       />
-      {isAdminEmail(account.email) && !isAdminAccount(account) && (
-        <Card className="border-sun/50 bg-sun-100 p-4 text-sm">
-          This email is an admin. To unlock Admin, prove it&apos;s your inbox once:{" "}
-          <Link href="/signin?next=/admin&error=verify" className="font-semibold underline">
-            sign in with an email link or code
-          </Link>
-          .
-        </Card>
-      )}
       <Card className="p-5 sm:p-6">
         <h2 className="mb-3 font-bold">Your cards</h2>
         {cards.length === 0 ? (

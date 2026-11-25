@@ -22,7 +22,7 @@ What each event's space has (paths below are inside the event, e.g. `/moonshot/m
 - **📸 Moments** (`/moments`): a dark, full-bleed gallery in motion: a tilted film strip of photos drifting under the title (hover pauses, tap opens), a featured moment with a slow pan-and-zoom, a staggered photo wall whose tiles rise in as you scroll (all motion is off for people who prefer reduced motion), and a full-screen viewer (swipe or arrow keys, with a shareable `#m-…` link per moment). Anyone (no card needed) can post up to 4 photos, a short update, or an X post link (shown with its text and images and a link back to X). Tag people with @handle: a moment shows "👋 Follow up" links to the cards of the people it mentions (and the X author), so a photo leads to someone you can reach. Admins can paste many X post links at once (recaps, highlights) to add them as moments. Moments and check-ins hide automatically after 3 reports; admins can hide or restore them.
 - **▶ Watch the highlights:** a full-screen story of every moment (Featured first): photos with a slow pan-and-zoom, videos with sound when the browser allows, words as big quote cards. Tap right/left to skip, hold to pause, swipe down or Esc to close. It ends with "Share the highlights on X". `/moments?story=1` opens it straight away.
 - **Reactions (🔥 ❤️ 👏):** one tap on any moment, in the viewer or the story, with no sign-up; tap again to take it back. Each browser keeps a random id for itself and only its hash is stored. Reactions count towards Featured, and Stats shows them.
-- **Featured on Moments:** an admin can pin any moment ("Feature this" in `/admin`). Otherwise Featured rotates every 30 minutes among the top 10 moments with a photo, scored by likes and replies on X (refreshed in the background every few hours) plus how often people opened it on the site in the last 30 days. Moments added in the last 48 hours count double, so new recaps get a turn. Posts from your "Top accounts" list (in `/admin`) get a strong boost; verified accounts a small one.
+- **Featured on Moments:** an admin can pin any moment ("Feature this" in the admin). Otherwise Featured rotates every 30 minutes among the top 10 moments with a photo, scored by likes and replies on X (refreshed in the background every few hours) plus how often people opened it on the site in the last 30 days. Moments added in the last 48 hours count double, so new recaps get a turn. Posts from your "Top accounts" list (in `/admin`) get a strong boost; verified accounts a small one.
 - **X videos play in Moments:** a video or GIF in an X post plays in the full-screen viewer (muted to start, tap for sound; a lighter file on phones), using the MP4s X's own embed uses. If X refuses, the still image and "View on X" show instead.
 - **X posts are used in two places, each added on purpose:** as people ("From X" cards, via "Add yourself" or admin's "Add people from X posts") and as moments (via the Moments form or admin's "Add a moment").
 - **Sharing on X (and WhatsApp):** every moment and card has its own share link (`/m/…`, `/p/…`) with a big preview image made for it (the photo with its caption, or a name card); the site and Moments page have their own previews too. "Post on X" buttons sit in the Moments viewer, right after posting a moment, after making a card, on Moments and on the homepage, with a ready-written post and #Moonshot2026. Shared links carry utm tags, so Stats shows shares and the visitors they bring back.
@@ -43,7 +43,7 @@ Every event page wears its own branding, taken from its official site: Moonshot 
 
 The homepage lists the most active events first (people count ten times a visit), then the rest by date. A card shows its people and visits once it has some.
 
-## Adding an event from its website (admin)
+## Adding an event from its website (admin, at latars.xyz/adminx)
 
 On **Admin → Event Connect → Inbox** (or **Events**), paste an event's website and press **Add event**. The server reads the page (public sites only, a few seconds at most) and fills in what it finds: the name, dates (schema.org Event data, or dates in the page text like "7th & 8th November 2026"), venue, tagline, organiser, logo and theme colour. The event lands under **Events → Waiting for approval**, and the message says what it couldn't find, so you can fill that in and approve it. Sites that only build their page in the browser give less to read.
 
@@ -61,22 +61,22 @@ Accounts use **Supabase Auth**. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_
 
 Every sign-in or confirmation email can also be finished with its code, typed on the site (this works on any device, and email scanners can't use it up). Supabase's default emails only contain the link, so under **Authentication → Email Templates**, add `Or enter this code: {{ .Token }}` to the **Magic Link** and **Confirm signup** templates. If a link fails, Supabase sends people back with an error; the site catches that on any page and shows a clear message on the sign-in page.
 
-The site keeps its own `accounts` row for each Supabase user (same id), so cards link to it. People in `ADMIN_EMAILS` get `/admin` when signed in (their account page shows an Admin button), as well as anyone with the `ADMIN_KEY`.
+The site keeps its own `accounts` row for each Supabase user (same id), so cards link to it. People in `ADMIN_EMAILS` can manage any event on this site when signed in. The admin itself moved to `latars.xyz/adminx` and uses the admin key only.
 
-## Admin
+## Admin (now at latars.xyz/adminx)
 
-One admin for everything on latars.xyz, at **`/adminx`** (also reached through latars.xyz). It has two projects, switched in the sidebar:
+The admin for every Latars project lives in the **`latars`** repo, at **`latars.xyz/adminx`**: Event Connect, AdsSim, Rates and the support inbox, signed in with the admin key. It reads and writes **this service's Postgres**: this service still owns the database and runs every migration (the `connect`, `ads`, `support` and `rates` schemas), the public sites and all the APIs. When a table or shared data logic changes here, the matching copy in `latars` needs the same change (its README says so).
 
-- **Event Connect** (events.latars.xyz)
-  - **Inbox:** what needs you first (reports, events waiting for approval, live or upcoming events missing details), then quick adds (an event from its website), the numbers and the latest activity across events.
-  - **Events:** every event with its logo, status (happening now, upcoming, waiting, past, featured ad, hidden), people, visits and moments, with filters and search. Each event has its own page: **Overview**, **Details** (the full form), **Moments** (add from X links, Featured, pin, hide) and **People** (check-ins, cards, X cards, comments).
-  - **Moderation:** every open report (several on one thing show as one), with Hide or Dismiss, or Keep hidden / Unhide when it already hid itself; and what's hidden lately, to undo a wrong call.
-  - **People:** accounts and the mailing list (CSV).
-  - **Stats.**
-- **AdsSim** (ads.latars.xyz): sign-ups, saved progress, activity and the emails CSV.
-- **Rates** (rates.latars.xyz): creators people added (with their rates and rate cards), sign-ups and the sign-ups CSV. Add a creator from just a link (with rates or a rate card file if you have them), hide a creator to take it off the site, or delete it.
+The old addresses still work: `/adminx` and `/admin` on this domain redirect (307) to `latars.xyz/adminx`.
 
-To everyone who isn't an admin, `/adminx` (and the old `/admin`) is a plain 404. Admins get in by signing in with an email in `ADMIN_EMAILS`, or with the admin key at the secret address `/adminx/<ADMIN_ENTRY>`. Until `ADMIN_ENTRY` is set, the key form shows on `/adminx` so nobody is locked out. Key attempts are rate-limited. Old `/admin` links redirect to their place in `/adminx`.
+What the admin does, for reference:
+
+- **Event Connect:** an inbox of what needs attention (reports, events waiting for approval), every event with its details, moments, people and stats, moderation, and adding an event from just its website.
+- **AdsSim:** sign-ups, activity and the emails CSV.
+- **Rates:** creators people added (with rates and rate cards), sign-ups, adding a creator from a link, hiding or deleting, and the sign-ups CSV.
+- **Support:** chats from visitors, with replies emailed to the visitor.
+
+`ADMIN_KEY` and `ADMIN_ENTRY` now belong to the `latars` service. `ADMIN_EMAILS` still lets a signed-in account manage any event on the events site, but it no longer opens an admin. `ADMIN_ORIGIN` (default `https://latars.xyz`) is where links to the admin point, for example in "new support message" emails.
 
 ## Rates backend (`/api/rates/*`)
 
@@ -98,7 +98,7 @@ Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to
 
 ## Stats
 
-`/admin/stats` (24 hours, 7, 30 or 90 days, or all time; arrows compare with the period before):
+The admin's **Stats** page (24 hours, 7, 30 or 90 days, or all time; arrows compare with the period before):
 
 - **Headline numbers:** visitors, visits, people who contacted someone (and the contact rate), average time on the site, pages per visitor, returning visitors, clicks and searches, plus how many people are on the site right now.
 - **Visits per hour or per day,** and the busiest hours of the day (Lagos time).
@@ -111,7 +111,7 @@ Tracking is built in and cookie-free. Each visitor is counted with an anonymous 
 
 ## Getting X posts in
 
-- **Manual (free):** anyone can paste a post link on **Add yourself**, and admins can paste many links at once in `/admin`. Post text comes from X's public embed endpoint. Images (attached photos, or the link-preview picture) and the author's profile picture come from the data X's own embed widget loads; posts already on the site get them filled in gradually in the background.
+- **Manual (free):** anyone can paste a post link on **Add yourself**, and admins can paste many links at once in the admin. Post text comes from X's public embed endpoint. Images (attached photos, or the link-preview picture) and the author's profile picture come from the data X's own embed widget loads; posts already on the site get them filled in gradually in the background.
 - **Automatic:** set `X_BEARER_TOKEN` (the official X API, on a plan that includes recent search). The site then searches for Moonshot posts at most every 15 minutes and adds them as cards.
 
 Nothing is scraped and nothing is invented.
@@ -153,7 +153,7 @@ Set `ADS_ORIGINS` (default `https://ads.latars.xyz`) to the sites allowed to cal
 
 **Email.** Reset links are sent with [Resend](https://resend.com): set `RESEND_API_KEY`, and `ADS_MAIL_FROM` (default `AdsSim <noreply@latars.xyz>`) to an address on a domain you've verified in Resend. Without a key, production logs "Email not sent" and nobody gets a link; locally the email is printed to the server log (or set `MAIL_TO_LOG=true` to do that in a production build, for trying things out). The link points at the page that asked, if it's in `ADS_ORIGINS`, otherwise at the first `ADS_ORIGINS` entry.
 
-## Support chat (`/adminx/support`)
+## Support chat (admin: `latars.xyz/adminx/support`)
 
 Visitors on **AdsSim** and **Event Connect** get a **Help** button with three ways to reach you: **chat**, **WhatsApp** and **email**. Chats land in **Admin → Support** (one inbox for both projects, with unread dots, a project filter, "Mark as done", and a reply box). The page refreshes by itself every few seconds, shows the unread count in the browser tab and as a badge next to Support in every admin page.
 
@@ -167,6 +167,6 @@ Visitors on **AdsSim** and **Event Connect** get a **Help** button with three wa
 - **Contact details** shown in the Help panel are in `src/lib/support-contact.ts`.
 - **API** (browsers on `ADS_ORIGINS` and this site): `POST /api/support/message` and `POST /api/support/thread`, both with `{ project: "ads" | "connect", token, … }`.
 
-## One admin home (`/adminx`)
+## One admin home
 
-`latars.xyz/adminx` forwards to `events.latars.xyz/adminx`, the one admin for everything (see **Admin** above): Event Connect and AdsSim are its two projects, behind the same admin sign-in.
+The one admin for everything is at `latars.xyz/adminx`, served by the `latars` repo (see **Admin** above).
