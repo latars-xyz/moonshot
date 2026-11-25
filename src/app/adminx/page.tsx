@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { adminGate } from "@/components/admin-gate";
 import { AdminShell, AdminTitle, StatTile } from "@/components/adminx/shell";
 import { adsAdminStats } from "@/lib/ads-admin";
+import { ratesAdminStats } from "@/lib/rates";
 import { connectTotals, eventRows, openReports } from "@/lib/admin-data";
 import { listThreads, unreadCount } from "@/lib/support";
 
@@ -15,7 +16,7 @@ export default async function AdminHome() {
   const gate = await adminGate();
   if (gate) return gate;
   const db = await getDb();
-  const [events, reports, totals, ads, unreadChats, openChats] = await Promise.all([eventRows(db), openReports(db), connectTotals(db), adsAdminStats(db), unreadCount(db), listThreads(db, { status: "open" })]);
+  const [events, reports, totals, ads, rates, unreadChats, openChats] = await Promise.all([eventRows(db), openReports(db), connectTotals(db), adsAdminStats(db), ratesAdminStats(db), unreadCount(db), listThreads(db, { status: "open" })]);
   const waiting = events.filter((e) => e.status === "waiting").length;
   const needs = reports.length + waiting;
   const live = events.filter((e) => e.status === "live").length;
@@ -76,7 +77,10 @@ export default async function AdminHome() {
           <StatTile label="Visitors" value={ads.visitors30} hint="last 30 days" />
         </Project>
         <Project href="/adminx/rates" icon={Coins} name="Rates" site="rates.latars.xyz" note={null}>
-          <p className="col-span-2 text-sm text-muted sm:col-span-4">Rate cards and benchmarks for creators and media firms.</p>
+          <StatTile label="Creators added" value={rates.creators} />
+          <StatTile label="With rates" value={rates.withRates} />
+          <StatTile label="Sign-ups" value={rates.users} />
+          <StatTile label="New this week" value={rates.newUsers7} />
         </Project>
         <Project href="/adminx/support" icon={MessageCircle} name="Support" site="chat with visitors from both sites" note={null}>
           <StatTile label="Unread" value={unreadChats} href="/adminx/support" alert={unreadChats > 0} />

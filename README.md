@@ -74,9 +74,24 @@ One admin for everything on latars.xyz, at **`/adminx`** (also reached through l
   - **People:** accounts and the mailing list (CSV).
   - **Stats.**
 - **AdsSim** (ads.latars.xyz): sign-ups, saved progress, activity and the emails CSV.
-- **Rates** (rates.latars.xyz): overview with links to the site. No database behind it yet, so no sign-ups or submissions to review.
+- **Rates** (rates.latars.xyz): creators people added (with their rates and rate cards), sign-ups and the sign-ups CSV. Add a creator from just a link (with rates or a rate card file if you have them), hide a creator to take it off the site, or delete it.
 
 To everyone who isn't an admin, `/adminx` (and the old `/admin`) is a plain 404. Admins get in by signing in with an email in `ADMIN_EMAILS`, or with the admin key at the secret address `/adminx/<ADMIN_ENTRY>`. Until `ADMIN_ENTRY` is set, the key form shows on `/adminx` so nobody is locked out. Key attempts are rate-limited. Old `/admin` links redirect to their place in `/adminx`.
+
+## Rates backend (`/api/rates/*`)
+
+This service also hosts the API for Rates by Latars at `rates.latars.xyz` (repo `rates`). It has **its own users, sessions, creators, rates and uploaded rate cards** in a separate `rates` Postgres schema, shared with nothing else. Like AdsSim there are no cookies: sign-in returns a per-device token sent as `Authorization: Bearer <token>`, and there is no email verification.
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/rates/signup`, `POST /api/rates/signin` | Email + password (8+ characters, scrypt-hashed). Return a token and the user. Rate limited per network. |
+| `POST /api/rates/signout`, `GET /api/rates/me` | End this device's token; check who a token belongs to. |
+| `GET /api/rates/creators` | Public. Every visible creator with their rates and rate card files. |
+| `POST /api/rates/creators` | Needs an account. Adds a creator from `link` (Instagram, TikTok, X, YouTube or a website; nothing is fetched, the name and handle are read from the link) plus optional `name`, `niche`, `type`, `country`, `followers`, `items` (rates) and `file` (a PDF, JPEG, PNG or WebP under 3 MB, base64). If the creator is already there (same `slug` or same link), the rates and file are added to it instead of making a duplicate, and empty details are filled in. |
+| `GET /api/rates/creators/<slug>` | One creator. |
+| `GET /api/rates/files/<id>` | An uploaded rate card, served inline with a locked-down content type and CSP. Hidden creators' files are not served. |
+
+Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to call it from a browser. Limits per hour per network: `RATE_LIMIT_RATES_SIGNUP_PER_HOUR` (10), `RATE_LIMIT_RATES_SIGNIN_PER_HOUR` (20), `RATE_LIMIT_RATES_ADD_PER_HOUR` (40).
 
 ## Stats
 
