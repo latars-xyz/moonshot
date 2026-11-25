@@ -6,7 +6,7 @@ import { adsSiteUrl, normaliseEmail, cleanName, rowsOf } from "@/lib/ads";
 import { sendMail, type Mail } from "@/lib/mail";
 
 // Support chat shared by AdsSim and Event Connect. A visitor keeps a random token in their browser (only its hash
-// is stored) and has one thread per project. The admin answers from /adminx/support. New messages reach the admin by
+// is stored) and has one thread per project. The admin answers from latars.xyz/adminx/support. New messages reach the admin by
 // email (SUPPORT_NOTIFY_EMAIL) and, optionally, as a phone push through ntfy (NTFY_TOPIC); a reply reaches a visitor
 // who left an email and isn't looking at the chat.
 
@@ -172,7 +172,8 @@ export function notifyAddress(): string | null {
 }
 
 export function adminLink(threadId: string) {
-  return `${siteUrl()}/adminx/support/${threadId}`;
+  // The admin lives at latars.xyz (the `latars` repo).
+  return `${(process.env.ADMIN_ORIGIN?.trim() || "https://latars.xyz").replace(/\/$/, "")}/adminx/support/${threadId}`;
 }
 
 export function adminNotificationEmail(p: { project: SupportProject; name: string | null; email: string | null; page: string | null; body: string; threadId: string }): Mail {

@@ -6,7 +6,7 @@ import { cleanName, hashPassword, normaliseEmail, rowsOf, validPassword, verifyP
 
 // Backend for Rates by Latars (rates.latars.xyz): its own accounts, creators, rates and uploaded rate cards in the
 // `rates` Postgres schema. Anyone with an account can add a creator from a link and add rates; there is no email
-// verification. The admin (/adminx/rates) can hide or delete anything.
+// verification. The admin (latars.xyz/adminx/rates, in the `latars` repo) can hide or delete anything.
 
 export { cleanName, normaliseEmail, validPassword };
 
@@ -215,23 +215,6 @@ export function cleanCreator(body: unknown): CreatorInput | { error: string } {
   return { link, name, nameHint, slug, type: b.type === "media" ? "media" : "creator", platform, niche, country, followers, bio, items, file };
 }
 
-/** "Instagram reel: 150000" or "Banner, 80000-120000" per line. Lines that don't read as a rate are reported, not dropped. */
-export function parseRateLines(text: string, currency: string): { items: Record<string, string>[]; bad: string[] } {
-  const items: Record<string, string>[] = [];
-  const bad: string[] = [];
-  for (const raw of text.split(/\r?\n/).slice(0, 80)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const m = line.match(/^(.*?)[\s:,=|-]+₦?\$?([\d][\d,\s.]*)(?:\s*(?:-|–|to)\s*₦?\$?([\d][\d,\s.]*))?\s*$/i);
-    if (!m || !m[1].trim()) {
-      bad.push(line);
-      continue;
-    }
-    items.push({ deliverable: m[1].trim(), priceMin: m[2].replace(/[,\s]/g, ""), priceMax: (m[3] ?? m[2]).replace(/[,\s]/g, ""), currency });
-  }
-  return { items, bad };
-}
-
 export interface CreatorDTO {
   slug: string;
   name: string;
@@ -403,53 +386,6 @@ export async function addCreator(
   const creator = await getCreator(db, row.slug);
   if (!creator) throw new Error("Could not read the creator back");
   return { creator, created };
-}
-
-// ─── Admin ───────────────────────────────────────────────────────────────────
-
-export interface RatesAdminStats {
-  users: number;
-  newUsers7: number;
-  creators: number;
-  hidden: number;
-  withRates: number;
-  rateItems: number;
-  files: number;
-  recent: (CreatorDTO & { id: string; hidden: boolean; addedBy: string | null })[];
-}
-
-export async function ratesAdminStats(db: DB): Promise<RatesAdminStats> {
-  const one = async (q: ReturnType<typeof sql>) => Number(rowsOf<{ n: number | string }>(await db.execute(q))[0]?.n ?? 0);
-  const [users, newUsers7, creators, hidden, withRates, rateItems, files] = await Promise.all([
-    one(sql`SELECT count(*)::int AS n FROM "rates"."users"`),
-    one(sql`SELECT count(*)::int AS n FROM "rates"."users" WHERE "created_at" > now() - interval '7 days'`),
-    one(sql`SELECT count(*)::int AS n FROM "rates"."creators"`),
-    one(sql`SELECT count(*)::int AS n FROM "rates"."creators" WHERE "hidden"`),
-    one(sql`SELECT count(DISTINCT x."creator_id")::int AS n FROM (SELECT "creator_id" FROM "rates"."rate_items" UNION SELECT "creator_id" FROM "rates"."files") x`),
-    one(sql`SELECT count(*)::int AS n FROM "rates"."rate_items"`),
-    one(sql`SELECT count(*)::int AS n FROM "rates"."files"`),
-  ]);
-  const rows = rowsOf<CreatorRow>(await db.execute(sql`SELECT ${COLUMNS} ${FROM} ORDER BY c."created_at" DESC LIMIT 200`));
-  return { users, newUsers7, creators, hidden, withRates, rateItems, files, recent: await attach(db, rows) };
-}
-
-export async function setCreatorHidden(db: DB, id: string, hidden: boolean) {
-  await db.execute(sql`UPDATE "rates"."creators" SET "hidden" = ${hidden}, "updated_at" = now() WHERE "id" = ${id}::uuid`);
-}
-
-export async function deleteCreator(db: DB, id: string) {
-  await db.execute(sql`DELETE FROM "rates"."creators" WHERE "id" = ${id}::uuid`);
-}
-
-export async function ratesUsersCsv(db: DB): Promise<string> {
-  const rows = rowsOf<{ email: string; name: string | null; created_at: Date | string; last_seen_at: Date | string; creators: number | string }>(
-    await db.execute(sql`
-      SELECT u."email", u."name", u."created_at", u."last_seen_at", (SELECT count(*) FROM "rates"."creators" c WHERE c."added_by" = u."id")::int AS creators
-      FROM "rates"."users" u ORDER BY u."created_at"`),
-  );
-  const cell = (v: string | null) => `"${(v ?? "").replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"`;
-  const iso = (d: Date | string) => new Date(d).toISOString();
-  return [["email", "name", "creators_added", "signed_up_at", "last_seen_at"].join(","), ...rows.map((r) => [cell(r.email), cell(r.name), Number(r.creators), iso(r.created_at), iso(r.last_seen_at)].join(","))].join("\r\n") + "\r\n";
 }
 
 // ─── Browser access ──────────────────────────────────────────────────────────

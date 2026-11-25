@@ -16,12 +16,18 @@ const legacyDomain = [{ source: "/:path*", has: [{ type: "host" as const, value:
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite"],
   images: { remotePatterns: [{ protocol: "https", hostname: "**" }] },
-  // latars.xyz forwards its admin (/adminx and /admin) to this app. Those pages post forms from latars.xyz, while this
-  // app sees its own host, so Next would reject them ("Invalid Server Actions request") without this allow-list.
-  experimental: { serverActions: { bodySizeLimit: "4mb", allowedOrigins: ["latars.xyz", "www.latars.xyz"] } },
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   async redirects() {
+    // The admin moved to latars.xyz (the `latars` repo). Old links and bookmarks to it on this domain land there.
+    // Temporary (307) redirects, so they're easy to change or take away.
+    const admin = [
+      { source: "/adminx", destination: "https://latars.xyz/adminx", permanent: false },
+      { source: "/adminx/:path*", destination: "https://latars.xyz/adminx/:path*", permanent: false },
+      { source: "/admin", destination: "https://latars.xyz/adminx", permanent: false },
+      { source: "/admin/:path*", destination: "https://latars.xyz/adminx", permanent: false },
+    ];
     // The old domain goes first, so it's a single hop.
-    return [...legacyDomain, ...moved, ...oldHome];
+    return [...legacyDomain, ...admin, ...moved, ...oldHome];
   },
 };
 
