@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Megaphone, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowRight, Coins, Megaphone, MessageCircle, Sparkles } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { adminGate } from "@/components/admin-gate";
 import { AdminShell, AdminTitle, StatTile } from "@/components/adminx/shell";
@@ -10,7 +10,7 @@ import { listThreads, unreadCount } from "@/lib/support";
 export const metadata = { title: "Admin", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-// The one admin for everything on latars.xyz. Each project has its own space; this page shows both at a glance.
+// The one admin for everything on latars.xyz. Each project has its own space; this page shows them at a glance.
 export default async function AdminHome() {
   const gate = await adminGate();
   if (gate) return gate;
@@ -74,6 +74,9 @@ export default async function AdminHome() {
           <StatTile label="New this week" value={ads.newUsers7} />
           <StatTile label="With saved progress" value={ads.withProgress} />
           <StatTile label="Visitors" value={ads.visitors30} hint="last 30 days" />
+        </Project>
+        <Project href="/adminx/rates" icon={Coins} name="Rates" site="rates.latars.xyz" note={null}>
+          <p className="col-span-2 text-sm text-muted sm:col-span-4">Rate cards and benchmarks for creators and media firms.</p>
         </Project>
         <Project href="/adminx/support" icon={MessageCircle} name="Support" site="chat with visitors from both sites" note={null}>
           <StatTile label="Unread" value={unreadChats} href="/adminx/support" alert={unreadChats > 0} />

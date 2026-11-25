@@ -1,19 +1,20 @@
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, CalendarDays, Home, Inbox, LogOut, Megaphone, MessageCircle, ShieldAlert, Sparkles, Users } from "lucide-react";
+import { ArrowUpRight, BarChart3, CalendarDays, Coins, Home, Inbox, LogOut, Megaphone, MessageCircle, ShieldAlert, Sparkles, Users } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { unreadCount } from "@/lib/support";
 import { adminLogoutAction } from "@/lib/actions";
 import { cx } from "@/components/ui";
 
-// The one admin (/adminx) for everything on latars.xyz. Two projects live in it: Event Connect (events.latars.xyz)
-// and AdsSim (ads.latars.xyz). The sidebar switches project; each project has its own sections.
+// The one admin (/adminx) for everything on latars.xyz. Three projects live in it: Event Connect (events.latars.xyz),
+// AdsSim (ads.latars.xyz) and Rates (rates.latars.xyz). The sidebar switches project; each project has its own sections.
 
-export type Project = "home" | "connect" | "ads" | "support";
-export type Section = "home" | "inbox" | "events" | "moderation" | "people" | "stats" | "ads" | "support";
+export type Project = "home" | "connect" | "ads" | "rates" | "support";
+export type Section = "home" | "inbox" | "events" | "moderation" | "people" | "stats" | "ads" | "rates" | "support";
 
 const PROJECTS: { id: Exclude<Project, "home">; label: string; site: string; href: string; icon: typeof Sparkles }[] = [
   { id: "connect", label: "Event Connect", site: "https://events.latars.xyz", href: "/adminx/connect", icon: Sparkles },
   { id: "ads", label: "AdsSim", site: "https://ads.latars.xyz", href: "/adminx/ads", icon: Megaphone },
+  { id: "rates", label: "Rates", site: "https://rates.latars.xyz", href: "/adminx/rates", icon: Coins },
   { id: "support", label: "Support", site: "https://events.latars.xyz", href: "/adminx/support", icon: MessageCircle },
 ];
 
@@ -32,6 +33,7 @@ const SECTIONS: Record<Exclude<Project, "home">, { id: Section; label: string; h
     { id: "stats", label: "Stats", href: "/adminx/connect/stats", icon: BarChart3 },
   ],
   ads: [{ id: "ads", label: "Overview", href: "/adminx/ads", icon: BarChart3 }],
+  rates: [{ id: "rates", label: "Overview", href: "/adminx/rates", icon: BarChart3 }],
   support: [],
 };
 
