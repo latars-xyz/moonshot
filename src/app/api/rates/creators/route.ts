@@ -13,16 +13,16 @@ export async function GET(req: NextRequest) {
 }
 
 // Adds a creator from a link (and a name, niche and rates if known), or adds rates and a rate card to one already
-// there. Needs an account, nothing more.
+// there. No account needed: a signed-in member is recorded as the adder, anyone else is anonymous. The per-network limit
+// is the guard against spam.
 export async function POST(req: NextRequest) {
   const db = await getDb();
   const user = await userForToken(db, bearer(req));
-  if (!user) return reply(req, { error: "Sign in to add a creator." }, 401);
-  if (!(await rateLimit("rates-add", Number(process.env.RATE_LIMIT_RATES_ADD_PER_HOUR ?? 40), 60))) return reply(req, { error: "You've added a lot just now. Try again in a while." }, 429);
+  if (!(await rateLimit("rates-add", Number(process.env.RATE_LIMIT_RATES_ADD_PER_HOUR ?? 20), 60))) return reply(req, { error: "You've added a lot just now. Try again in a while." }, 429);
   const body = await readJson(req, Math.ceil(MAX_FILE_BYTES * 1.4) + 60_000);
   if (body === undefined) return reply(req, { error: "That couldn't be read, or it was too large. Rate cards must be under 3 MB." }, 413);
   const input = cleanCreator(body);
   if ("error" in input) return reply(req, { error: input.error }, 400);
-  const { creator, created } = await addCreator(db, input, { userId: user.id, admin: false });
+  const { creator, created } = await addCreator(db, input, { userId: user?.id ?? null, admin: false });
   return reply(req, { creator, created }, created ? 201 : 200);
 }

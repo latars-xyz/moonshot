@@ -275,7 +275,7 @@ async function attach(db: DB, rows: CreatorRow[]): Promise<(CreatorDTO & { id: s
   return rows.map((r) => ({
     id: r.id,
     hidden: r.hidden,
-    addedBy: r.added_by_admin ? "Admin" : r.added_by_email ?? null,
+    addedBy: r.added_by_admin ? "Admin" : r.added_by_email ?? "Visitor",
     slug: r.slug,
     name: r.name,
     type: r.type,

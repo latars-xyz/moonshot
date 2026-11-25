@@ -121,6 +121,13 @@ describe("creators", () => {
     expect(more.creator.items.map((i) => i.deliverable)).toEqual(["Reel", "Story"]);
   });
 
+  it("lets anyone add a creator without an account, shown as a visitor to the admin", async () => {
+    const { creator } = await addCreator(db, input({ link: "https://tiktok.com/@walkin" }), { userId: null, admin: false });
+    expect(creator.slug).toBe("walkin");
+    const row = (await ratesAdminStats(db)).recent.find((c) => c.slug === "walkin")!;
+    expect(row.addedBy).toBe("Visitor");
+  });
+
   it("keeps existing details, filling only the empty ones", async () => {
     await addCreator(db, input({ name: "Keep Me", slug: "keep-me", bio: "first bio", niche: "tech" }), { userId, admin: false });
     const { creator } = await addCreator(db, input({ name: "Different", slug: "keep-me", bio: "second bio", followers: 5000, niche: "food" }), { userId, admin: false });

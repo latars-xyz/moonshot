@@ -87,11 +87,11 @@ This service also hosts the API for Rates by Latars at `rates.latars.xyz` (repo 
 | `POST /api/rates/signup`, `POST /api/rates/signin` | Email + password (8+ characters, scrypt-hashed). Return a token and the user. Rate limited per network. |
 | `POST /api/rates/signout`, `GET /api/rates/me` | End this device's token; check who a token belongs to. |
 | `GET /api/rates/creators` | Public. Every visible creator with their rates and rate card files. |
-| `POST /api/rates/creators` | Needs an account. Adds a creator from `link` (Instagram, TikTok, X, YouTube or a website; nothing is fetched, the name and handle are read from the link) plus optional `name`, `niche`, `type`, `country`, `followers`, `items` (rates) and `file` (a PDF, JPEG, PNG or WebP under 3 MB, base64). If the creator is already there (same `slug` or same link), the rates and file are added to it instead of making a duplicate, and empty details are filled in. |
+| `POST /api/rates/creators` | No account needed (a signed-in member is recorded as the adder, anyone else shows as a visitor in the admin). Adds a creator from `link` (Instagram, TikTok, X, YouTube or a website; nothing is fetched, the name and handle are read from the link) plus optional `name`, `niche`, `type`, `country`, `followers`, `items` (rates) and `file` (a PDF, JPEG, PNG or WebP under 3 MB, base64). If the creator is already there (same `slug` or same link), the rates and file are added to it instead of making a duplicate, and empty details are filled in. |
 | `GET /api/rates/creators/<slug>` | One creator. |
 | `GET /api/rates/files/<id>` | An uploaded rate card, served inline with a locked-down content type and CSP. Hidden creators' files are not served. |
 
-Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to call it from a browser. Limits per hour per network: `RATE_LIMIT_RATES_SIGNUP_PER_HOUR` (10), `RATE_LIMIT_RATES_SIGNIN_PER_HOUR` (20), `RATE_LIMIT_RATES_ADD_PER_HOUR` (40).
+Set `RATES_ORIGINS` (default `https://rates.latars.xyz`) to the sites allowed to call it from a browser. Limits per hour per network: `RATE_LIMIT_RATES_SIGNUP_PER_HOUR` (10), `RATE_LIMIT_RATES_SIGNIN_PER_HOUR` (20), `RATE_LIMIT_RATES_ADD_PER_HOUR` (20, the only guard on adding, since it needs no account).
 
 ## Stats
 
