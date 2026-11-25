@@ -74,6 +74,7 @@ One admin for everything on latars.xyz, at **`/adminx`** (also reached through l
   - **People:** accounts and the mailing list (CSV).
   - **Stats.**
 - **AdsSim** (ads.latars.xyz): sign-ups, saved progress, activity and the emails CSV.
+- **Rates** (rates.latars.xyz): overview with links to the site. No database behind it yet, so no sign-ups or submissions to review.
 
 To everyone who isn't an admin, `/adminx` (and the old `/admin`) is a plain 404. Admins get in by signing in with an email in `ADMIN_EMAILS`, or with the admin key at the secret address `/adminx/<ADMIN_ENTRY>`. Until `ADMIN_ENTRY` is set, the key form shows on `/adminx` so nobody is locked out. Key attempts are rate-limited. Old `/admin` links redirect to their place in `/adminx`.
 

@@ -21,7 +21,7 @@ export async function adminGate(): Promise<React.ReactNode | null> {
 export function AdminKeyPage() {
   return (
     <div className="mx-auto max-w-xl px-4 py-12">
-      <PageTitle title="Admin" sub="Event Connect and AdsSim, in one place." />
+      <PageTitle title="Admin" sub="Event Connect, AdsSim and Rates, in one place." />
       <AdminLogin />
     </div>
   );
